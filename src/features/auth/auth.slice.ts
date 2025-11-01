@@ -1,4 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { login } from "./auth.thunks";
+import token from "@/utils/token";
 // import api from "@/lib/api";
 
 export interface User {
@@ -9,12 +11,28 @@ export interface User {
   token?: string;
 }
 
-interface AuthState {
-  user: User | null;
-  loading: boolean;
-  error: string | null;
+export type UserType = "Retailer" | "Administrator" | "Wholesaler" | null;
+
+export type AuthState = {
   isAuthenticated: boolean;
-}
+  userId?: string | null;
+  retailerId?: string | null;
+  user?: User | null;
+  status: "idle" | "loading" | "succeeded" | "failed";
+  error: string | null;
+  userType: UserType;
+};
+
+export const INITIAL_STATE_AUTH: AuthState = {
+  isAuthenticated: false,
+  userCredit: null,
+  user: null,
+  userId: null,
+  retailerId: null,
+  status: RequestStatus.Idle,
+  error: null,
+  userType: null,
+};
 
 const initialState: AuthState = {
   user: null,
@@ -22,21 +40,6 @@ const initialState: AuthState = {
   error: null,
   isAuthenticated: false,
 };
-
-export const loginUser = createAsyncThunk(
-  "auth/login",
-  async (
-    credentials: { email: string; password: string },
-    { rejectWithValue }
-  ) => {
-    try {
-      // const response = await api.post("/auth/login", credentials);
-      // return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.message || "Login failed");
-    }
-  }
-);
 
 export const registerUser = createAsyncThunk(
   "auth/register",
@@ -77,21 +80,18 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(loginUser.pending, (state) => {
+      .addCase(login.pending, (state) => {
         state.loading = true;
         state.error = null;
       })
-      .addCase(loginUser.fulfilled, (state, action) => {
+      .addCase(login.fulfilled, (state, action) => {
         state.loading = false;
-        state.user = action.payload.user;
         state.isAuthenticated = true;
-        if (action.payload.token) {
-          localStorage.setItem("token", action.payload.token);
-        }
+        token.set(action.payload.jwt);
       })
-      .addCase(loginUser.rejected, (state, action) => {
+      .addCase(login.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload as string;
+        state.error = action.payload?.message;
       })
       .addCase(registerUser.pending, (state) => {
         state.loading = true;

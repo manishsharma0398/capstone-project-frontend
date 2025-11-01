@@ -1,8 +1,5 @@
 "use client";
 
-import type React from "react";
-
-import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -16,26 +13,36 @@ import {
 } from "@/components/ui/card";
 import { Heart } from "lucide-react";
 import { GoogleAuthButton } from "@/components/google-auth-button";
+import { useForm, SubmitHandler } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import z from "zod";
+import { useAppDispatch } from "@/hooks";
+import { login } from "@/features/auth";
+
+const FormSchema = z.object({
+  email: z.email().trim().toLowerCase(),
+  password: z.string(),
+});
+
+type IFormInput = z.infer<typeof FormSchema>;
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const dispatch = useAppDispatch();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      localStorage.setItem(
-        "user",
-        JSON.stringify({ email, role: "volunteer" })
-      );
-      router.push("/dashboard");
-      setIsLoading(false);
-    }, 1000);
-  };
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting, isLoading },
+  } = useForm<IFormInput>({
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+    resolver: zodResolver(FormSchema),
+  });
+
+  const onSubmit: SubmitHandler<IFormInput> = (data) => dispatch(login(data));
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
@@ -66,16 +73,14 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div>
                 <label className="text-sm font-medium">Email</label>
                 <Input
                   type="email"
                   placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
                   className="mt-1"
+                  {...register("email")}
                 />
               </div>
               <div>
@@ -83,14 +88,16 @@ export default function LoginPage() {
                 <Input
                   type="password"
                   placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
                   className="mt-1"
+                  {...register("password")}
                 />
               </div>
-              <Button type="submit" disabled={isLoading} className="w-full">
-                {isLoading ? "Signing in..." : "Sign In"}
+              <Button
+                type="submit"
+                disabled={isLoading || isLoading}
+                className="w-full"
+              >
+                {isSubmitting ? "Signing in..." : "Sign In"}
               </Button>
             </form>
 

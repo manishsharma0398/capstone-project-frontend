@@ -17,6 +17,14 @@ import {
 import { Heart } from "lucide-react";
 import { GoogleAuthButton } from "@/components/google-auth-button";
 
+interface IFormInput {
+  firstName: string;
+  lastName: string;
+  password: string;
+  email: string;
+  role: string;
+}
+
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
     firstName: "",
