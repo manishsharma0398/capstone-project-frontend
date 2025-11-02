@@ -1,5 +1,3 @@
-// This eslint rule is disable because we cannot use serverLogger in this file (circular dependency issue)
-/* eslint-disable no-console */
 import token from "@/utils/token";
 import axios, {
   AxiosError,
@@ -7,9 +5,6 @@ import axios, {
   AxiosRequestConfig,
   AxiosResponse,
 } from "axios";
-// import { ERROR_LOGS, SESSION_TOKEN } from "constants/index";
-import decode, { JwtPayload } from "jsonwebtoken";
-// import { serverLogger } from "utils/serverLogs.utils";
 
 /**
  * Logs out the current user.

@@ -1,15 +1,18 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { VariantProps } from "class-variance-authority";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+type ButtonVariants = VariantProps<typeof buttonVariants>;
+
 export function GoogleAuthButton({
-  variant = "default",
+  variant = "outline",
   size = "default",
 }: {
-  variant?: string;
-  size?: string;
+  variant?: ButtonVariants["variant"];
+  size?: ButtonVariants["size"];
 }) {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -17,21 +20,7 @@ export function GoogleAuthButton({
   const handleGoogleAuth = async () => {
     setIsLoading(true);
     try {
-      // For now, simulating Google authentication
-      // In production: window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google`
-
-      // Simulate API call to Google OAuth
-      const mockGoogleUser = {
-        email: "user@gmail.com",
-        name: "Google User",
-        id: "google_" + Math.random().toString(36).substr(2, 9),
-      };
-
-      localStorage.setItem(
-        "user",
-        JSON.stringify({ ...mockGoogleUser, role: "volunteer" })
-      );
-      router.push("/dashboard");
+      router.push("http://localhost:8000/auth/google");
     } catch (error) {
       console.error("Google auth error:", error);
     } finally {
@@ -42,7 +31,7 @@ export function GoogleAuthButton({
   return (
     <Button
       type="button"
-      variant="outline"
+      variant={variant}
       size={size}
       onClick={handleGoogleAuth}
       disabled={isLoading}

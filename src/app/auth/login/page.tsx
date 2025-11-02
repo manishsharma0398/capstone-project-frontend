@@ -16,12 +16,12 @@ import { GoogleAuthButton } from "@/components/google-auth-button";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import z from "zod";
-import { useAppDispatch } from "@/hooks";
-import { login } from "@/features/auth";
+import { useAppDispatch, useToast } from "@/hooks";
+import { APIResponseError, loginUser } from "@/features/auth";
 
 const FormSchema = z.object({
   email: z.email().trim().toLowerCase(),
-  password: z.string(),
+  password: z.string().trim().min(6, "Password must be at least 6 characters"),
 });
 
 type IFormInput = z.infer<typeof FormSchema>;
@@ -29,6 +29,7 @@ type IFormInput = z.infer<typeof FormSchema>;
 export default function LoginPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
+  const { toast } = useToast();
 
   const {
     register,
@@ -42,7 +43,23 @@ export default function LoginPage() {
     resolver: zodResolver(FormSchema),
   });
 
-  const onSubmit: SubmitHandler<IFormInput> = (data) => dispatch(login(data));
+  const onSubmit: SubmitHandler<IFormInput> = async (data) => {
+    try {
+      const { decodedJwt } = await dispatch(loginUser(data)).unwrap();
+
+      if (decodedJwt.role === "volunteer") {
+        router.push("/dashboard");
+      } else if (decodedJwt.role === "organization") {
+        router.push("/org-dashboard");
+      }
+    } catch (error) {
+      const err = error as APIResponseError;
+      toast({
+        description: err?.message,
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
@@ -82,6 +99,11 @@ export default function LoginPage() {
                   className="mt-1"
                   {...register("email")}
                 />
+                {errors.email && (
+                  <p className="mt-1 text-xs text-destructive">
+                    {errors.email.message}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium">Password</label>
@@ -91,6 +113,11 @@ export default function LoginPage() {
                   className="mt-1"
                   {...register("password")}
                 />
+                {errors.password && (
+                  <p className="mt-1 text-xs text-destructive">
+                    {errors.password.message}
+                  </p>
+                )}
               </div>
               <Button
                 type="submit"

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "./ui/button";
 import { LogOut } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "@/hooks";
-import { logout } from "@/features/auth";
+import { logoutUser } from "@/features/auth";
 
 export function Navbar() {
   const { isAuthenticated, user } = useAppSelector((state) => state.auth);
@@ -19,13 +19,13 @@ export function Navbar() {
         </Link>
 
         <div className="flex items-center space-x-4">
-          {isAuthenticated && user ? (
+          {isAuthenticated ? (
             <>
-              <span className="text-sm text-gray-600">{user.name}</span>
+              <span className="text-sm text-gray-600">{user?.name}</span>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => dispatch(logout())}
+                onClick={() => dispatch(logoutUser())}
                 className="flex items-center gap-2"
               >
                 <LogOut size={16} />

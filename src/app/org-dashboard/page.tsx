@@ -120,7 +120,9 @@ export default function OrgDashboardPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline">Post Opportunity</Button>
+            <Link href="/listings/new">
+              <Button variant="outline">Post Opportunity</Button>
+            </Link>
             <Link href="/org-dashboard/profile">
               <Button>Edit Profile</Button>
             </Link>
@@ -191,10 +193,12 @@ export default function OrgDashboardPage() {
                       Manage volunteer opportunities posted by your organization
                     </CardDescription>
                   </div>
-                  <Button size="sm" className="flex items-center gap-2">
-                    <Plus size={16} />
-                    Post New
-                  </Button>
+                  <Link href="/listings/new">
+                    <Button size="sm" className="flex items-center gap-2">
+                      <Plus size={16} />
+                      Post New
+                    </Button>
+                  </Link>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">

@@ -1,8 +1,5 @@
 "use client";
 
-import type React from "react";
-
-import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -16,50 +13,64 @@ import {
 } from "@/components/ui/card";
 import { Heart } from "lucide-react";
 import { GoogleAuthButton } from "@/components/google-auth-button";
+import z from "zod";
+import { SubmitHandler, useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useAppDispatch, useToast } from "@/hooks";
+import { APIResponseError, registerUser } from "@/features/auth";
 
-interface IFormInput {
-  firstName: string;
-  lastName: string;
-  password: string;
-  email: string;
-  role: string;
-}
+const FormSchema = z.object({
+  email: z.email().trim().toLowerCase(),
+  firstName: z
+    .string()
+    .trim()
+    .min(2, "First name must be at least 2 characters"),
+  lastName: z.string().trim().min(2, "Last name must be at least 2 characters"),
+  role: z.enum(["volunteer", "organization"], {
+    message: "Role must be either volunteer or organization",
+  }),
+  password: z.string().trim().min(6, "Password must be at least 6 characters"),
+});
+
+type IFormInput = z.infer<typeof FormSchema>;
 
 export default function RegisterPage() {
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    password: "",
-    role: "volunteer",
-  });
-  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
+  const dispatch = useAppDispatch();
+  const { toast } = useToast();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          email: formData.email,
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          role: formData.role,
-        })
-      );
-      router.push("/dashboard");
-      setIsLoading(false);
-    }, 1000);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting, isLoading },
+  } = useForm<IFormInput>({
+    defaultValues: {
+      email: "",
+      password: "",
+      firstName: "",
+      lastName: "",
+      role: "volunteer",
+    },
+    resolver: zodResolver(FormSchema),
+  });
+
+  const onSubmit: SubmitHandler<IFormInput> = async (data) => {
+    try {
+      const { decodedJwt } = await dispatch(registerUser(data)).unwrap();
+      console.log("Debug decodedJwt", decodedJwt);
+      if (decodedJwt.role === "volunteer") {
+        router.push("/dashboard");
+      } else if (decodedJwt.role === "organization") {
+        router.push("/org-dashboard");
+      }
+    } catch (error) {
+      const err = error as APIResponseError;
+      toast({
+        description: err?.message,
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -91,71 +102,86 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium">First Name</label>
                   <Input
                     type="text"
-                    name="firstName"
                     placeholder="John"
-                    value={formData.firstName}
-                    onChange={handleChange}
-                    required
                     className="mt-1"
+                    {...register("firstName")}
                   />
+                  {errors.firstName && (
+                    <p className="mt-1 text-xs text-destructive">
+                      {errors.firstName.message}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-sm font-medium">Last Name</label>
                   <Input
                     type="text"
-                    name="lastName"
                     placeholder="Doe"
-                    value={formData.lastName}
-                    onChange={handleChange}
-                    required
                     className="mt-1"
+                    {...register("lastName")}
                   />
+                  {errors.lastName && (
+                    <p className="mt-1 text-xs text-destructive">
+                      {errors.lastName.message}
+                    </p>
+                  )}
                 </div>
               </div>
               <div>
                 <label className="text-sm font-medium">Email</label>
                 <Input
                   type="email"
-                  name="email"
                   placeholder="you@example.com"
-                  value={formData.email}
-                  onChange={handleChange}
-                  required
                   className="mt-1"
+                  {...register("email")}
                 />
+                {errors.email && (
+                  <p className="mt-1 text-xs text-destructive">
+                    {errors.email.message}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium">Password</label>
                 <Input
                   type="password"
-                  name="password"
                   placeholder="••••••••"
-                  value={formData.password}
-                  onChange={handleChange}
-                  required
                   className="mt-1"
+                  {...register("password")}
                 />
+                {errors.password && (
+                  <p className="mt-1 text-xs text-destructive">
+                    {errors.password.message}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium">I am a...</label>
                 <select
-                  name="role"
-                  value={formData.role}
-                  onChange={handleChange}
                   className="w-full mt-1 px-3 py-2 border border-input rounded-md bg-background"
+                  {...register("role")}
                 >
                   <option value="volunteer">Volunteer</option>
                   <option value="organization">Organization</option>
                 </select>
+                {errors.role && (
+                  <p className="mt-1 text-xs text-destructive">
+                    {errors.role.message}
+                  </p>
+                )}
               </div>
-              <Button type="submit" disabled={isLoading} className="w-full">
-                {isLoading ? "Creating account..." : "Create Account"}
+              <Button
+                type="submit"
+                disabled={isLoading || isLoading}
+                className="w-full"
+              >
+                {isSubmitting ? "Creating account..." : "Create Account"}
               </Button>
             </form>
             <div className="mt-6 text-center text-sm">

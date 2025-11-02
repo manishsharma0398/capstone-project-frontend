@@ -1,116 +1,180 @@
-import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { login } from "./auth.thunks";
+import { createSlice } from "@reduxjs/toolkit";
+import { loginUser, registerUser } from "./auth.thunks";
 import token from "@/utils/token";
-// import api from "@/lib/api";
+import { RequestStatus } from "../common.types";
+import { AppState } from "@/app/store";
+import { deleteCookie, setCookie } from "cookies-next";
+import { CookieKeys } from "@/constants";
+import { redirect } from "next/navigation";
 
+export type UserType = "volunteer" | "organization" | "admin";
+export type AuthProvider = "local" | "phone" | "google";
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: "volunteer" | "organization";
-  token?: string;
+  role: UserType;
+  token: string;
 }
-
-export type UserType = "Retailer" | "Administrator" | "Wholesaler" | null;
 
 export type AuthState = {
   isAuthenticated: boolean;
-  userId?: string | null;
-  retailerId?: string | null;
-  user?: User | null;
-  status: "idle" | "loading" | "succeeded" | "failed";
+  userId: number | null;
+  user: User | null;
+  status:
+    | RequestStatus.Idle
+    | RequestStatus.Failed
+    | RequestStatus.Loading
+    | RequestStatus.Succeeded;
   error: string | null;
-  userType: UserType;
+  errorCode: string | null;
+  userType: UserType | null;
+  provider: AuthProvider | null;
+};
+
+const COOKIE_DOMAIN = "localhost";
+const maxAge = 7 * 24 * 60 * 60; // 7 days in seconds
+export const DEFAULT_COOKIE_OPTIONS = {
+  path: "/",
+  domain: COOKIE_DOMAIN,
+  maxAge,
 };
 
 export const INITIAL_STATE_AUTH: AuthState = {
   isAuthenticated: false,
-  userCredit: null,
   user: null,
   userId: null,
-  retailerId: null,
   status: RequestStatus.Idle,
   error: null,
+  errorCode: null,
   userType: null,
+  provider: null,
 };
-
-const initialState: AuthState = {
-  user: null,
-  loading: false,
-  error: null,
-  isAuthenticated: false,
-};
-
-export const registerUser = createAsyncThunk(
-  "auth/register",
-  async (
-    userData: {
-      email: string;
-      password: string;
-      name: string;
-      role: "volunteer" | "organization";
-    },
-    { rejectWithValue }
-  ) => {
-    try {
-      // const response = await api.post("/auth/register", userData);
-      // return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || "Registration failed"
-      );
-    }
-  }
-);
 
 const authSlice = createSlice({
   name: "auth",
-  initialState,
+  initialState: INITIAL_STATE_AUTH,
   reducers: {
-    logout: (state) => {
-      state.user = null;
-      state.isAuthenticated = false;
-      state.token = undefined;
-      localStorage.removeItem("token");
+    logoutUser: (state) => {
+      token.clear();
+      deleteCookie(CookieKeys.JWT_TOKEN, DEFAULT_COOKIE_OPTIONS);
+      deleteCookie(CookieKeys.USER_ROLE, DEFAULT_COOKIE_OPTIONS);
+
+      state.error = INITIAL_STATE_AUTH.error;
+      state.errorCode = INITIAL_STATE_AUTH.errorCode;
+      state.isAuthenticated = INITIAL_STATE_AUTH.isAuthenticated;
+      state.provider = INITIAL_STATE_AUTH.provider;
+      state.status = INITIAL_STATE_AUTH.status;
+      state.user = INITIAL_STATE_AUTH.user;
+      state.userId = INITIAL_STATE_AUTH.userId;
+      state.userType = INITIAL_STATE_AUTH.userType;
+
+      redirect("/");
     },
-    setUser: (state, action) => {
-      state.user = action.payload;
+
+    setAuthenticatedUser: (state, action) => {
+      state.status = RequestStatus.Succeeded;
       state.isAuthenticated = true;
+
+      state.userId = action.payload.userId;
+      state.userType = action.payload.role;
+      state.provider = action.payload.provider;
+
+      token.set(action.payload.jwt);
+      setCookie(
+        CookieKeys.JWT_TOKEN,
+        action.payload.jwt,
+        DEFAULT_COOKIE_OPTIONS
+      );
+      setCookie(
+        CookieKeys.USER_ROLE,
+        action.payload.decodedJwt.role,
+        DEFAULT_COOKIE_OPTIONS
+      );
     },
   },
   extraReducers: (builder) => {
     builder
-      .addCase(login.pending, (state) => {
-        state.loading = true;
+      .addCase(loginUser.pending, (state) => {
+        state.status = RequestStatus.Loading;
         state.error = null;
       })
-      .addCase(login.fulfilled, (state, action) => {
-        state.loading = false;
+      .addCase(loginUser.fulfilled, (state, action) => {
+        state.status = RequestStatus.Succeeded;
         state.isAuthenticated = true;
+
+        state.userId = action.payload.decodedJwt.userId;
+        state.userType = action.payload.decodedJwt.role;
+
+        state.provider = action.payload.decodedJwt.provider;
+
         token.set(action.payload.jwt);
+        setCookie(
+          CookieKeys.JWT_TOKEN,
+          action.payload.jwt,
+          DEFAULT_COOKIE_OPTIONS
+        );
+        setCookie(
+          CookieKeys.USER_ROLE,
+          action.payload.decodedJwt.role,
+          DEFAULT_COOKIE_OPTIONS
+        );
       })
-      .addCase(login.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload?.message;
-      })
-      .addCase(registerUser.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(registerUser.fulfilled, (state, action) => {
-        state.loading = false;
-        state.user = action.payload.user;
-        state.isAuthenticated = true;
-        if (action.payload.token) {
-          localStorage.setItem("token", action.payload.token);
+      .addCase(loginUser.rejected, (state, action) => {
+        state.status = RequestStatus.Failed;
+        state.error = action.payload?.message as string;
+        if (action.payload?.code) {
+          state.errorCode = action.payload!.code;
         }
       })
+
+      .addCase(registerUser.pending, (state) => {
+        state.status = RequestStatus.Loading;
+        state.error = null;
+        state.errorCode = null;
+      })
+      .addCase(registerUser.fulfilled, (state, action) => {
+        state.status = RequestStatus.Succeeded;
+        state.isAuthenticated = true;
+
+        state.userId = action.payload.decodedJwt.userId;
+        state.userType = action.payload.decodedJwt.role;
+        state.user = action.payload.user as User;
+        state.provider = action.payload.decodedJwt.provider as AuthProvider;
+
+        token.set(action.payload.jwt);
+        setCookie(
+          CookieKeys.JWT_TOKEN,
+          action.payload.jwt,
+          DEFAULT_COOKIE_OPTIONS
+        );
+        setCookie(
+          CookieKeys.USER_ROLE,
+          action.payload.decodedJwt.role,
+          DEFAULT_COOKIE_OPTIONS
+        );
+      })
       .addCase(registerUser.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload as string;
+        state.status = RequestStatus.Failed;
+        state.error = action.payload?.message as string;
+        if (action.payload?.code) {
+          state.errorCode = action.payload!.code;
+        }
       });
   },
 });
 
-export const { logout, setUser } = authSlice.actions;
 export const authReducer = authSlice.reducer;
+
+export const { logoutUser, setAuthenticatedUser } = authSlice.actions;
+
+// selectors
+export const getUserId = (state: AppState) =>
+  state.auth.userId || INITIAL_STATE_AUTH.userId;
+export const getIsAuthenticated = (state: AppState) =>
+  state.auth.isAuthenticated || INITIAL_STATE_AUTH.isAuthenticated;
+export const getUser = (state: AppState) =>
+  state.auth.user || INITIAL_STATE_AUTH.user;
+
+export const getAuthState = (state: AppState) =>
+  state.auth || INITIAL_STATE_AUTH;
