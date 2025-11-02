@@ -22,11 +22,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Navbar } from "@/components/navbar";
-import { useToast } from "@/hooks/use-toast";
 import {
   ChevronLeft,
   Plus,
@@ -68,6 +66,13 @@ interface TimeSlot {
 
 const STEPS = ["details", "location", "skills", "schedule", "media", "preview"];
 
+interface PresignedFile {
+  uploadUrl: string;
+  key: string;
+  fileName: string;
+  fileUrl: string;
+}
+
 export default function CreateListingPage() {
   const [formData, setFormData] = useState({
     title: "",
@@ -88,7 +93,7 @@ export default function CreateListingPage() {
   const [media, setMedia] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState("details");
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const { toastHelpers } = useToast();
+  //   const { toastHelpers } = useToast();
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -144,7 +149,7 @@ export default function CreateListingPage() {
 
   const handleSaveDraft = () => {
     console.log("[v0] Saving draft:", formData, selectedSkills, timeSlots);
-    toastHelpers.listingCreated();
+    // toastHelpers.listingCreated();
   };
 
   const handlePublish = async () => {
@@ -166,11 +171,11 @@ export default function CreateListingPage() {
         })),
       });
 
-      const presigned = presignRes.data?.data?.urls ?? [];
+      const presigned: PresignedFile[] = presignRes.data?.data?.urls ?? [];
 
       // 2️⃣ Step 2 — Upload each file directly to S3 using the presigned URL
       await Promise.all(
-        presigned.map((file, i) =>
+        presigned.map((file: PresignedFile, i: number) =>
           axios.put(file.uploadUrl, media[i], {
             headers: {
               "Content-Type": media[i].type,

@@ -7,6 +7,7 @@ export const safeLocalStorage = {
     if (typeof window === "undefined") return defaultValue;
     try {
       const value = localStorage.getItem(key);
+      if (!value) return defaultValue; // ✅ handle null case
 
       // Special case: jwtToken might be a plain string (legacy)
       if (key === LocalStorageKeys.JWT_TOKEN) {
@@ -20,11 +21,6 @@ export const safeLocalStorage = {
 
       return JSON.parse(value);
     } catch (err) {
-      //   serverLogger.error(
-      //     `Failed to read localStorage key: ${key}`,
-      //     err,
-      //     "safeLocalStorage"
-      //   );
       return defaultValue;
     }
   },

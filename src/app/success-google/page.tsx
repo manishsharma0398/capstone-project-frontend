@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAppDispatch } from "@/hooks";
 import token from "@/utils/token";
 import { setAuthenticatedUser } from "@/features/auth";
 
-export default function SuccessGooglePage() {
+function SuccessGoogleContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const dispatch = useAppDispatch();
@@ -20,10 +20,7 @@ export default function SuccessGooglePage() {
     }
 
     try {
-      // ✅ Decode and push to Redux
       const decoded = token.decode(accessToken);
-
-      console.log("Debug decoded", decoded);
 
       if (decoded) {
         dispatch(
@@ -34,7 +31,6 @@ export default function SuccessGooglePage() {
             provider: decoded.provider,
           })
         );
-
         router.push("/dashboard");
       } else {
         router.push("/auth/login");
@@ -48,5 +44,19 @@ export default function SuccessGooglePage() {
     <div className="flex flex-col items-center justify-center h-screen">
       <p className="text-lg font-medium">Signing you in via Google...</p>
     </div>
+  );
+}
+
+export default function SuccessGooglePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="h-screen flex items-center justify-center">
+          Loading...
+        </div>
+      }
+    >
+      <SuccessGoogleContent />
+    </Suspense>
   );
 }
