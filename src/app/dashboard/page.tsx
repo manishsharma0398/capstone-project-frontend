@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -15,6 +15,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Clock, Users, AlertCircle, CheckCircle } from "lucide-react";
 import { Navbar } from "@/components/navbar";
+import { applicationsFetcher, listingsFetcher } from "@/services";
+import { useAppDispatch, useAppSelector } from "@/hooks";
+import { setListings } from "@/features/listings";
+import { ApplyModal } from "@/components/ApplyModal";
 
 const opportunitiesData = [
   {
@@ -76,6 +80,11 @@ const applicationsData = [
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("opportunities");
   const router = useRouter();
+  const { items, total } = useAppSelector((state) => state.listings.listings);
+  const { userId } = useAppSelector((state) => state.auth);
+  const dispatch = useAppDispatch();
+
+  const [myapplications, setMyApplications] = useState({ items: [], total: 0 });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -102,6 +111,33 @@ export default function DashboardPage() {
         return null;
     }
   };
+
+  const [selectedListing, setSelectedListing] = useState<number | null>(null);
+  const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
+
+  const handleApplyClick = (listingId: number) => {
+    setSelectedListing(listingId);
+    setIsApplyModalOpen(true);
+  };
+
+  const closeApplyModal = () => {
+    setIsApplyModalOpen(false);
+    setSelectedListing(null);
+  };
+
+  useEffect(() => {
+    const fetchListings = async () => {
+      const data = await listingsFetcher.get("/");
+      dispatch(setListings({ listings: data.data.data }));
+    };
+    const fetchApplications = async () => {
+      const data = await applicationsFetcher.get(`/user`);
+      console.log("Debug data.data", data.data.data);
+      setMyApplications(data.data.data);
+    };
+    fetchListings();
+    fetchApplications();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -180,7 +216,7 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {opportunitiesData.map((opportunity) => (
+                {items?.map((opportunity) => (
                   <div
                     key={opportunity.id}
                     className="flex items-start justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
@@ -208,7 +244,11 @@ export default function DashboardPage() {
                       </div>
                       <Badge variant="secondary">{opportunity.category}</Badge>
                     </div>
-                    <Button variant="outline" className="ml-4 bg-transparent">
+                    <Button
+                      variant="outline"
+                      className="ml-4 bg-transparent"
+                      onClick={() => handleApplyClick(opportunity.id)}
+                    >
                       Apply
                     </Button>
                   </div>
@@ -226,7 +266,7 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {applicationsData.map((application) => (
+                {myapplications?.items?.map((application) => (
                   <div
                     key={application.id}
                     className="flex items-start justify-between p-4 border border-border rounded-lg"
@@ -238,20 +278,22 @@ export default function DashboardPage() {
                         </h3>
                         <Badge
                           className={`flex items-center gap-1 ${getStatusColor(
-                            application.status
+                            application.application_status
                           )}`}
                         >
-                          {getStatusIcon(application.status)}
-                          {application.status.charAt(0).toUpperCase() +
-                            application.status.slice(1)}
+                          {getStatusIcon(application.application_status)}
+                          {application.application_status
+                            .charAt(0)
+                            .toUpperCase() +
+                            application.application_status.slice(1)}
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground mb-1">
-                        Applied: {application.appliedDate}
+                        Applied: {application.created_at}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      {/* <p className="text-sm text-muted-foreground">
                         Event: {application.eventDate}
-                      </p>
+                      </p> */}
                     </div>
                   </div>
                 ))}
@@ -260,6 +302,11 @@ export default function DashboardPage() {
           </TabsContent>
         </Tabs>
       </main>
+      <ApplyModal
+        open={isApplyModalOpen}
+        onClose={closeApplyModal}
+        listingId={selectedListing || 0}
+      />
     </div>
   );
 }

@@ -1,7 +1,5 @@
 "use client";
 
-import type React from "react";
-
 import { useState } from "react";
 import Link from "next/link";
 import {
@@ -37,8 +35,13 @@ import {
 } from "lucide-react";
 import { SkillsSelector } from "@/components/SkillsSelector";
 import { MediaUploader } from "@/components/MediaUploader";
-import { mediaFetcher } from "@/services";
+import { listingsFetcher, mediaFetcher } from "@/services";
 import axios from "axios";
+import { useRouter } from "next/navigation";
+import { useAppSelector, useToast } from "@/hooks";
+import z from "zod";
+import { SubmitHandler, useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 
 const LISTING_TYPES = [
   { value: "volunteer_opportunity", label: "Volunteer Opportunity" },
@@ -73,38 +76,74 @@ interface PresignedFile {
   fileUrl: string;
 }
 
+const FormSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  description: z.string().min(1, "Description is required"),
+  listingStatus: z.string(),
+  listingType: z.string().optional(),
+  location: z.string().optional(),
+  extraData: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  country: z.string().optional(),
+  skills: z.array(z.number()).optional(),
+  media: z.array(z.string()).optional(),
+  timeSlots: z.array(
+    z
+      .object({
+        id: z.number(),
+        day: z.string(),
+        startTime: z.string(),
+        endTime: z.string(),
+      })
+      .optional()
+  ),
+});
+
+type FormInput = z.infer<typeof FormSchema>;
+
 export default function CreateListingPage() {
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    listingType: "volunteer_opportunity",
-    status: "draft",
-    city: "",
-    state: "",
-    country: "India",
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting, isLoading },
+    getValues,
+    trigger,
+  } = useForm<FormInput>({
+    defaultValues: {
+      title: "",
+      description: "",
+      listingStatus: "draft",
+      listingType: "volunteer_opportunity",
+      location: "",
+      extraData: "",
+      city: "",
+      state: "",
+      country: "India",
+      skills: [],
+      media: [],
+      timeSlots: [
+        { id: 1, day: "Saturday", startTime: "10:00", endTime: "14:00" },
+      ],
+    },
+    resolver: zodResolver(FormSchema),
   });
+
+  const router = useRouter();
+
+  const { userId } = useAppSelector((state) => state.auth);
 
   const [selectedSkills, setSelectedSkills] = useState<
     { id: number; title: string }[]
   >([]);
+  const [submitting, setSubmitting] = useState(false);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([
     { id: "1", day: "Saturday", startTime: "10:00", endTime: "14:00" },
   ]);
-  const [media, setMedia] = useState<any[]>([]);
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [activeTab, setActiveTab] = useState("details");
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  //   const { toastHelpers } = useToast();
-
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
+  const { toast } = useToast();
 
   const addTimeSlot = () => {
     const newSlot: TimeSlot = {
@@ -128,7 +167,57 @@ export default function CreateListingPage() {
     }
   };
 
-  const goToNextStep = () => {
+  const validateRequiredFields = async () => {
+    const isValid = await trigger(["title", "description"]);
+
+    if (!isValid) {
+      toast({
+        description: "Please fill in the required fields before proceeding.",
+        variant: "destructive",
+      });
+    }
+
+    return isValid; // stop navigation
+  };
+
+  const handleSaveDraft = async () => {
+    const isValid = await validateRequiredFields();
+    if (!isValid) return;
+
+    const data = getValues();
+
+    try {
+      const skillIds = selectedSkills.map((s) => s.id);
+
+      const payload = {
+        ...data,
+        listingStatus: "draft", // force draft state
+        skills: skillIds,
+        media: [], // skip upload for now
+      };
+
+      await listingsFetcher.post("/new", payload);
+
+      toast({
+        description: "Draft saved successfully.",
+        variant: "success",
+      });
+
+      return router.push("/org-dashboard");
+    } catch (error) {
+      console.error("Draft save failed:", error);
+      toast({
+        description: "Failed to save draft. Check console for details.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const goToNextStep = async () => {
+    if (currentStepIndex === 0) {
+      validateRequiredFields();
+    }
+
     if (currentStepIndex < STEPS.length - 1) {
       setCurrentStepIndex(currentStepIndex + 1);
       setActiveTab(STEPS[currentStepIndex + 1]);
@@ -147,67 +236,60 @@ export default function CreateListingPage() {
     setActiveTab(STEPS[sectionIndex]);
   };
 
-  const handleSaveDraft = () => {
-    console.log("[v0] Saving draft:", formData, selectedSkills, timeSlots);
-    // toastHelpers.listingCreated();
-  };
-
-  const handlePublish = async () => {
-    // if (!formData.title || !formData.description) {
-    //   toastHelpers.validationError("Please fill in all required fields");
-    //   return;
-    // }
-    // const a = selectedSkills.map((s) => s.id);
-    // console.log("[v0] Publishing listing:", formData, a, timeSlots);
-    // toastHelpers.listingCreated();
-
+  const onSubmit: SubmitHandler<FormInput> = async (data) => {
     try {
-      // 1️⃣ Step 1 — Request presigned URLs from backend
-      const presignRes = await mediaFetcher.post("/presign", {
-        files: media.map((file) => ({
-          fileName: file.name,
-          fileType: file.type,
-          scope: "listing",
-        })),
-      });
+      let uploadedUrls: string[] = [];
 
-      const presigned: PresignedFile[] = presignRes.data?.data?.urls ?? [];
+      if (mediaFiles?.length > 0) {
+        // 1️⃣ Step 1 — Request presigned URLs
+        const presignRes = await mediaFetcher.post("/presign", {
+          files: mediaFiles.map((file) => ({
+            fileName: file.name,
+            fileType: file.type,
+            scope: "listing",
+          })),
+        });
 
-      // 2️⃣ Step 2 — Upload each file directly to S3 using the presigned URL
-      await Promise.all(
-        presigned.map((file: PresignedFile, i: number) =>
-          axios.put(file.uploadUrl, media[i], {
-            headers: {
-              "Content-Type": media[i].type,
-            },
-            onUploadProgress: (progressEvent) => {
-              const percent = Math.round(
-                (progressEvent.loaded * 100) / (progressEvent.total || 1)
-              );
-              console.log(`Uploading ${file.fileName}: ${percent}%`);
-            },
-          })
-        )
-      );
+        const presigned: PresignedFile[] = presignRes.data?.data?.urls ?? [];
 
-      // 3️⃣ Step 3 — Get the final S3 URLs
-      const uploadedUrls = presigned.map((f) => f.fileUrl);
+        // 2️⃣ Step 2 — Upload files to S3
+        await Promise.all(
+          presigned.map((file, i) =>
+            axios.put(file.uploadUrl, mediaFiles[i], {
+              headers: { "Content-Type": mediaFiles[i].type },
+              onUploadProgress: (progressEvent) => {
+                const percent = Math.round(
+                  (progressEvent.loaded * 100) / (progressEvent.total || 1)
+                );
+                console.log(`Uploading ${file.fileName}: ${percent}%`);
+              },
+            })
+          )
+        );
 
-      console.log("Debug uploadedUrls", uploadedUrls);
-      //   const skillsIds = selectedSkills.map((s) => s.id);
+        // 3️⃣ Step 3 — Collect final S3 URLs
+        uploadedUrls = presigned.map((f) => f.fileUrl);
+      }
 
-      //   // 4️⃣ Step 4 — Save the listing with uploaded media
-      //   await listingsFetcher.post("/", {
-      //     ...formData,
-      //     skills: skillsIds,
-      //     media: uploadedUrls,
-      //     timeSlots,
-      //   });
+      const skillIds = selectedSkills.map((s) => s.id);
 
-      //   toastHelpers.listingCreated();
+      const payload = {
+        ...data,
+        skills: skillIds,
+        media: uploadedUrls,
+      };
+
+      await listingsFetcher.post("/new", payload);
+
+      return router.push("/org-dashboard");
     } catch (error) {
       console.error("Publish failed:", error);
-      //   toastHelpers.validationError("Failed to publish listing");
+      toast({
+        description: "Failed to publish listing. Check console for details.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -301,41 +383,46 @@ export default function CreateListingPage() {
                   <Label htmlFor="title">Title *</Label>
                   <Input
                     id="title"
-                    name="title"
                     placeholder="e.g., Community Garden Cleanup"
-                    value={formData.title}
-                    onChange={handleInputChange}
                     maxLength={256}
+                    {...register("title")}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    {formData.title.length}/256 characters
-                  </p>
+                  <div className="flex justify-between">
+                    {errors?.title ? (
+                      <p className="text-sm text-destructive">
+                        {errors?.title?.message}
+                      </p>
+                    ) : (
+                      <p></p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {getValues("title")?.length || 0}/256 characters
+                    </p>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="description">Description *</Label>
                   <Textarea
                     id="description"
-                    name="description"
                     placeholder="Describe your listing in detail..."
-                    value={formData.description}
-                    onChange={handleInputChange}
                     rows={6}
+                    {...register("description")}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Provide details about the opportunity, requirements, and
-                    benefits
-                  </p>
+
+                  {errors?.description && (
+                    <p className="mt-1 mb-2 text-xs text-destructive">
+                      {errors?.description?.message}
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="listingType">Listing Type *</Label>
                     <Select
-                      value={formData.listingType}
-                      onValueChange={(value) =>
-                        handleSelectChange("listingType", value)
-                      }
+                      value={getValues("listingType")}
+                      {...register("listingType")}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -353,10 +440,8 @@ export default function CreateListingPage() {
                   <div className="space-y-2">
                     <Label htmlFor="status">Status</Label>
                     <Select
-                      value={formData.status}
-                      onValueChange={(value) =>
-                        handleSelectChange("status", value)
-                      }
+                      value={getValues("listingStatus")}
+                      {...register("listingStatus")}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -391,10 +476,8 @@ export default function CreateListingPage() {
                   <Label htmlFor="city">City / Area Name</Label>
                   <Input
                     id="city"
-                    name="city"
                     placeholder="e.g., San Francisco"
-                    value={formData.city}
-                    onChange={handleInputChange}
+                    {...register("city")}
                   />
                 </div>
 
@@ -402,10 +485,8 @@ export default function CreateListingPage() {
                   <Label htmlFor="state">State / Province</Label>
                   <Input
                     id="state"
-                    name="state"
                     placeholder="e.g., California"
-                    value={formData.state}
-                    onChange={handleInputChange}
+                    {...register("state")}
                   />
                 </div>
 
@@ -413,10 +494,8 @@ export default function CreateListingPage() {
                   <Label htmlFor="country">Country</Label>
                   <Input
                     id="country"
-                    name="country"
                     placeholder="Country"
-                    value={formData.country}
-                    onChange={handleInputChange}
+                    {...register("country")}
                     disabled
                   />
                   <p className="text-xs text-muted-foreground">
@@ -534,7 +613,6 @@ export default function CreateListingPage() {
           </TabsContent>
 
           {/* Media Tab */}
-          {/* Media Tab */}
           <TabsContent value="media" className="space-y-6">
             <Card>
               <CardHeader>
@@ -547,7 +625,7 @@ export default function CreateListingPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <MediaUploader media={media} setMedia={setMedia} />
+                <MediaUploader media={mediaFiles} setMedia={setMediaFiles} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -584,13 +662,13 @@ export default function CreateListingPage() {
                     <div>
                       <p className="text-muted-foreground">Title</p>
                       <p className="text-foreground font-medium">
-                        {formData.title || "Not provided"}
+                        {getValues("title") || "Not provided"}
                       </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Description</p>
                       <p className="text-foreground">
-                        {formData.description || "Not provided"}
+                        {getValues("description") || "Not provided"}
                       </p>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -599,7 +677,7 @@ export default function CreateListingPage() {
                         <p className="text-foreground font-medium">
                           {
                             LISTING_TYPES.find(
-                              (t) => t.value === formData.listingType
+                              (t) => t.value === getValues("listingType")
                             )?.label
                           }
                         </p>
@@ -607,7 +685,7 @@ export default function CreateListingPage() {
                       <div>
                         <p className="text-muted-foreground">Status</p>
                         <p className="text-foreground font-medium capitalize">
-                          {formData.status}
+                          {getValues("listingStatus")}
                         </p>
                       </div>
                     </div>
@@ -636,19 +714,19 @@ export default function CreateListingPage() {
                       <div>
                         <p className="text-muted-foreground">City</p>
                         <p className="text-foreground font-medium">
-                          {formData.city || "Not provided"}
+                          {getValues("city") || "Not provided"}
                         </p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">State</p>
                         <p className="text-foreground font-medium">
-                          {formData.state || "Not provided"}
+                          {getValues("state") || "Not provided"}
                         </p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Country</p>
                         <p className="text-foreground font-medium">
-                          {formData.country}
+                          {getValues("country")}
                         </p>
                       </div>
                     </div>
@@ -741,8 +819,8 @@ export default function CreateListingPage() {
                     </Button>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {media.length > 0
-                      ? `${media.length} file(s) uploaded`
+                    {mediaFiles.length > 0
+                      ? `${mediaFiles.length} file(s) uploaded`
                       : "No media uploaded"}
                   </p>
                 </div>
@@ -773,12 +851,13 @@ export default function CreateListingPage() {
               <Button onClick={goToNextStep}>Next</Button>
             )}
             {currentStepIndex === STEPS.length - 1 && (
-              <>
-                <Button variant="outline" onClick={goToPreviousStep}>
-                  Previous
-                </Button>
-                <Button onClick={handlePublish}>Publish Listing</Button>
-              </>
+              <Button
+                type="submit"
+                onClick={handleSubmit(onSubmit)}
+                disabled={submitting}
+              >
+                {submitting ? "Publishing..." : "Publish Listing"}
+              </Button>
             )}
             {currentStepIndex === STEPS.length - 2 && (
               <Button onClick={goToNextStep}>Preview</Button>

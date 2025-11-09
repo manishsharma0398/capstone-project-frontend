@@ -27,10 +27,8 @@ const getLogOrigin = (): "client" | "server" =>
  * @returns {AxiosInstance} Configured Axios instance with request and response interceptors.
  */
 const apiFactory = ({
-  baseURL = "http://localhost:8000",
-  headers = {
-    Authorization: token.get() || "GUEST_TOKEN",
-  },
+  baseURL,
+  headers = {},
   timeout = 9000,
   responseType = "json",
   responseEncoding = "utf8",
@@ -39,8 +37,8 @@ const apiFactory = ({
   // Create an Axios instance with the provided configuration
   const instance = axios.create({
     baseURL,
-    timeout,
     headers,
+    timeout,
     responseType,
     responseEncoding,
     ...rest,
@@ -49,6 +47,11 @@ const apiFactory = ({
   // Add request and response interceptors to handle JWT expiration and logout
   instance.interceptors.request.use(
     (config) => {
+      const currentToken = token.get();
+      config.headers = config.headers || {};
+      config.headers.Authorization = currentToken
+        ? `Bearer ${currentToken}`
+        : "GUEST_TOKEN";
       return config;
     },
     (err: AxiosError) => Promise.reject(err)
@@ -57,37 +60,26 @@ const apiFactory = ({
   instance.interceptors.response.use(
     (response: AxiosResponse) => response,
     (err: AxiosError) => {
+      const isTokenExpired = token.isExpired();
       // Check if the error is due to JWT expiration or unauthorized access
-      if (err.response && err.response.status === 403) {
+      if ((err.response && err.response.status === 403) || isTokenExpired) {
         const method = err.config?.method?.toUpperCase() || "UNKNOWN_METHOD";
         const url = err.config?.url || "UNKNOWN_URL";
-        // serverLogger.info(
-        //   `Received 403 Forbidden response for ${method} ${url}. Checking JWT token expiration...`,
-        //   {
-        //     method,
-        //     url,
-        //   },
-        //   "api-factory-interceptor",
-        //   getLogOrigin()
-        // );
+        const message = isTokenExpired
+          ? "JWT token is expired. Logging out the user..."
+          : `Received 403 Forbidden response for ${method} ${url}. Logging out the user....`;
 
-        if (token.isExpired()) {
-          //   serverLogger.warn(
-          //     "JWT token is expired. Logging out the user...",
-          //     {},
-          //     "api-factory-interceptor",
-          //     getLogOrigin()
-          //   );
-          logoutUser();
-          // TODO: Optionally, we can return a rejected promise or redirect
-        } else {
-          //   serverLogger.info(
-          //     "JWT token is valid, but access is forbidden. No action taken.",
-          //     {},
-          //     "api-factory-interceptor",
-          //     getLogOrigin()
-          //   );
-        }
+        console.error(
+          message,
+          {
+            method,
+            url,
+          },
+          "api-factory-interceptor",
+          getLogOrigin()
+        );
+
+        if (isTokenExpired) logoutUser();
       }
 
       return Promise.reject(err);

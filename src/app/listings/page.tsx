@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Clock, Users, Search } from "lucide-react";
 import { Navbar } from "@/components/navbar";
+import { useAppDispatch, useAppSelector } from "@/hooks";
+import { getListingsByOrganizationId } from "@/features/listings";
 
 const allOpportunitiesData = [
   {
@@ -91,6 +93,9 @@ const allOpportunitiesData = [
 ];
 
 export default function ListingsPage() {
+  const dispatch = useAppDispatch();
+  const { userId } = useAppSelector((state) => state.auth);
+  const { listings } = useAppSelector((state) => state.listings);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
 
@@ -102,6 +107,10 @@ export default function ListingsPage() {
     "Social Services",
     "Animal Welfare",
   ];
+
+  useEffect(() => {
+    dispatch(getListingsByOrganizationId({ organizationId: userId! }));
+  }, [userId]);
 
   const filteredOpportunities = allOpportunitiesData.filter((opportunity) => {
     const matchesSearch =

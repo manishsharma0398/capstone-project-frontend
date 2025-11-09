@@ -1,3 +1,4 @@
+import { applicationsReducer } from "@/features/applications";
 import { authReducer } from "@/features/auth";
 import { authListener } from "@/features/auth/auth.utils";
 import { listingsReducer } from "@/features/listings";
@@ -6,6 +7,7 @@ import { combineReducers, configureStore } from "@reduxjs/toolkit";
 export const rootReducer = combineReducers({
   auth: authReducer,
   listings: listingsReducer,
+  applications: applicationsReducer,
 });
 
 export type RootState = ReturnType<typeof rootReducer>;

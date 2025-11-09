@@ -19,31 +19,25 @@ interface ThunkApiConfig {
 
 export const getListingsByOrganizationId = createAsyncThunk<
   { listings: Array<{ [key: string]: unknown }> },
-  { organizationId: number },
+  null,
   ThunkApiConfig
->(
-  "listings/getListingsByOrganizationId",
-  async (
-    { organizationId }: { organizationId: number },
-    { rejectWithValue }
-  ) => {
-    try {
-      const listings = await listingsFetcher.get(`/${organizationId}`);
+>("listings/getListingsByOrganizationId", async (_, { rejectWithValue }) => {
+  try {
+    const listings = await listingsFetcher.get(`/organization`);
 
-      return { listings: listings.data.data };
-    } catch (error) {
-      const err = error as AxiosError<APIResponseError>;
-      const apiError = err.response?.data;
+    return { listings: listings.data.data };
+  } catch (error) {
+    const err = error as AxiosError<APIResponseError>;
+    const apiError = err.response?.data;
 
-      return rejectWithValue({
-        code: apiError?.code || "UNKNOWN_ERROR",
-        message: apiError?.message || "Something went wrong",
-        requestId: apiError?.requestId || "",
-        success: apiError?.success || false,
-      });
-    }
+    return rejectWithValue({
+      code: apiError?.code || "UNKNOWN_ERROR",
+      message: apiError?.message || "Something went wrong",
+      requestId: apiError?.requestId || "",
+      success: apiError?.success || false,
+    });
   }
-);
+});
 
 // export const registerUser = createAsyncThunk<
 //   { jwt: string; decodedJwt: DecodedJWTToken; user: unknown },

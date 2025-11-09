@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -21,33 +21,36 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { Navbar } from "@/components/navbar";
+import { useAppDispatch, useAppSelector } from "@/hooks";
+import { getListingsByOrganizationId } from "@/features/listings";
+import { getApplicationsByOrganizationId } from "@/features/applications";
 
-const postedOpportunitiesData = [
-  {
-    id: 1,
-    title: "Community Garden Cleanup",
-    date: "Nov 15, 2024",
-    volunteersNeeded: 15,
-    volunteersApplied: 8,
-    status: "active",
-  },
-  {
-    id: 2,
-    title: "Senior Fitness Classes",
-    date: "Nov 10, 2024",
-    volunteersNeeded: 5,
-    volunteersApplied: 3,
-    status: "active",
-  },
-  {
-    id: 3,
-    title: "Youth Mentoring Program",
-    date: "Nov 12, 2024",
-    volunteersNeeded: 20,
-    volunteersApplied: 12,
-    status: "active",
-  },
-];
+// const postedOpportunitiesData = [
+//   {
+//     id: 1,
+//     title: "Community Garden Cleanup",
+//     date: "Nov 15, 2024",
+//     volunteersNeeded: 15,
+//     volunteersApplied: 8,
+//     status: "active",
+//   },
+//   {
+//     id: 2,
+//     title: "Senior Fitness Classes",
+//     date: "Nov 10, 2024",
+//     volunteersNeeded: 5,
+//     volunteersApplied: 3,
+//     status: "active",
+//   },
+//   {
+//     id: 3,
+//     title: "Youth Mentoring Program",
+//     date: "Nov 12, 2024",
+//     volunteersNeeded: 20,
+//     volunteersApplied: 12,
+//     status: "active",
+//   },
+// ];
 
 const applicationsData = [
   {
@@ -76,6 +79,10 @@ const applicationsData = [
 export default function OrgDashboardPage() {
   const [activeTab, setActiveTab] = useState("opportunities");
   const router = useRouter();
+  const { userId } = useAppSelector((state) => state.auth);
+  const { listings } = useAppSelector((state) => state.listings);
+
+  const dispatch = useAppDispatch();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -105,6 +112,13 @@ export default function OrgDashboardPage() {
         return null;
     }
   };
+
+  useEffect(() => {
+    Promise.allSettled([
+      dispatch(getListingsByOrganizationId(null)),
+      dispatch(getApplicationsByOrganizationId(null)),
+    ]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -202,7 +216,7 @@ export default function OrgDashboardPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {postedOpportunitiesData.map((opportunity) => (
+                {listings?.items?.map((opportunity) => (
                   <div
                     key={opportunity.id}
                     className="flex items-start justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
